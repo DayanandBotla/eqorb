@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORB VWAP Equity - Nifty 50</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0a0f1c; color: #e0f2fe; font-family: system-ui; }
+  .card { background: #1a2338; border: 1px solid #334155; }
+</style>
+</head>
+<body class="p-4 max-w-7xl mx-auto">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-emerald-400">🚀 ORB + VWAP Equity</h1>
+    <div id="istTime" class="text-xl font-mono"></div>
+  </div>
+
+  <!-- Credentials -->
+  <div class="card p-6 rounded-xl mb-6">
+    <h2 class="text-lg font-semibold mb-4">🔑 Dhan Credentials (Saved in Browser)</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <input id="clientId" placeholder="Client ID" class="bg-slate-900 p-3 rounded-lg border border-slate-700">
+      <input id="accessToken" type="password" placeholder="Access Token" class="bg-slate-900 p-3 rounded-lg border border-slate-700">
+    </div>
+    <button onclick="saveCredentials()" class="mt-4 bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg font-medium">Save & Connect</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="flex gap-4 mb-6">
+    <button onclick="toggleBot()" id="startBtn" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-3 rounded-xl font-semibold">▶️ START BOT</button>
+    <button onclick="emergencyExit()" class="bg-red-600 hover:bg-red-500 px-8 py-3 rounded-xl font-semibold">⚠️ EMERGENCY EXIT</button>
+    <label class="flex items-center gap-2">
+      <input type="checkbox" id="paperMode" checked class="w-5 h-5">
+      <span>Paper Mode</span>
+    </label>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4 rounded-xl">
+      <div class="text-slate-400 text-sm">Capital</div>
+      <div class="text-2xl font-bold">₹50,000</div>
+    </div>
+    <div class="card p-4 rounded-xl">
+      <div class="text-slate-400 text-sm">Active Trades</div>
+      <div id="activeCount" class="text-2xl font-bold text-amber-400">0 / 3</div>
+    </div>
+    <div class="card p-4 rounded-xl">
+      <div class="text-slate-400 text-sm">IST Time</div>
+      <div id="liveTime" class="text-xl font-mono"></div>
+    </div>
+    <div class="card p-4 rounded-xl">
+      <div class="text-slate-400 text-sm">Today's P&L</div>
+      <div id="pnl" class="text-2xl font-bold text-emerald-400">₹0</div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card p-6 rounded-xl">
+    <h3 class="font-semibold mb-3">📋 Activity Log</h3>
+    <div id="logContainer" class="font-mono text-sm space-y-1 max-h-96 overflow-y-auto"></div>
+  </div>
+
+  <script>
+    const CRED_KEY = 'orb_vwap_creds_' + new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Kolkata'});
+
+    function loadCredentials() {
+      const saved = localStorage.getItem(CRED_KEY);
+      if (saved) {
+        const {cid, tok} = JSON.parse(saved);
+        document.getElementById('clientId').value = cid || '';
+        document.getElementById('accessToken').value = tok || '';
+      }
+    }
+
+    async function saveCredentials() {
+      const cid = document.getElementById('clientId').value.trim();
+      const tok = document.getElementById('accessToken').value.trim();
+      if (!cid || !tok) return alert("Both fields required");
+
+      localStorage.setItem(CRED_KEY, JSON.stringify({cid, tok}));
+
+      // Call connect
+      const res = await fetch('/api/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({client_id: cid, access_token: tok})
+      });
+      const data = await res.json();
+      alert(data.message || 'Connected');
+    }
+
+    function updateClock() {
+      const timeEl = document.getElementById('liveTime');
+      timeEl.textContent = new Date().toLocaleTimeString('en-IN', {timeZone: 'Asia/Kolkata', hour12: false});
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Poll status
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        document.getElementById('activeCount').textContent = `${data.active_trades.length} / 3`;
+        // Update log
+        const logDiv = document.getElementById('logContainer');
+        logDiv.innerHTML = data.log.map(l => `<div>${l}</div>`).join('');
+      } catch(e) {}
+    }
+    setInterval(pollStatus, 5000);
+    pollStatus();
+
+    async function toggleBot() {
+      const btn = document.getElementById('startBtn');
+      // Call /api/start or /api/stop accordingly
+      alert("Bot toggle - implement full endpoints as needed");
+    }
+
+    async function emergencyExit() {
+      await fetch('/api/emergency_exit', {method: 'POST'});
+      alert("Emergency exit triggered");
+    }
+
+    loadCredentials();
+  </script>
+</body>
+</html>
