@@ -3,69 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ORB + VWAP Equity</title>
+    <title>ORB + VWAP Equity Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background: #0a0f1c; color: #e0f2fe; }
         .card { background: #1a2338; border: 1px solid #334155; }
+        .log { font-family: monospace; font-size: 13px; line-height: 1.4; }
     </style>
 </head>
 <body class="p-4">
     <div class="max-w-6xl mx-auto">
-        <h1 class="text-3xl font-bold text-emerald-400 mb-6">🚀 ORB + VWAP Equity (Long Only)</h1>
+        <h1 class="text-3xl font-bold text-emerald-400 mb-6 flex items-center gap-3">
+            🚀 ORB + VWAP Equity (Long Only)
+        </h1>
 
+        <!-- Credentials -->
         <div class="card p-6 rounded-2xl mb-6">
             <h2 class="text-lg font-semibold mb-4">🔑 Dhan Credentials</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input id="clientId" value="1108455416" class="bg-slate-900 p-3 rounded-lg border border-slate-700">
-                <input id="accessToken" type="password" class="bg-slate-900 p-3 rounded-lg border border-slate-700" placeholder="Today's Token">
+                <input id="clientId" value="1108455416" 
+                       class="bg-slate-900 p-3 rounded-lg border border-slate-700 text-white" placeholder="Client ID">
+                <input id="accessToken" type="password" 
+                       class="bg-slate-900 p-3 rounded-lg border border-slate-700 text-white" placeholder="Paste Today's Access Token">
             </div>
-            <button onclick="connectDhan()" class="mt-4 bg-emerald-600 px-8 py-3 rounded-xl">Save & Connect</button>
+            <button onclick="connectDhan()" 
+                    class="mt-4 bg-emerald-600 hover:bg-emerald-500 px-8 py-3 rounded-xl font-medium w-full">
+                Save & Connect
+            </button>
         </div>
 
-        <div class="flex gap-4 mb-8">
-            <button onclick="startBot()" class="bg-emerald-600 hover:bg-emerald-500 px-10 py-4 rounded-2xl font-semibold">▶️ START BOT</button>
-            <button onclick="emergencyExit()" class="bg-red-600 hover:bg-red-500 px-10 py-4 rounded-2xl font-semibold">⚠️ EMERGENCY EXIT</button>
+        <!-- Controls -->
+        <div class="flex flex-wrap gap-4 mb-8">
+            <button onclick="startBot()" 
+                    class="bg-emerald-600 hover:bg-emerald-500 px-10 py-4 rounded-2xl font-semibold flex-1">
+                ▶️ START BOT
+            </button>
+            <button onclick="emergencyExit()" 
+                    class="bg-red-600 hover:bg-red-500 px-10 py-4 rounded-2xl font-semibold flex-1">
+                ⚠️ EMERGENCY EXIT
+            </button>
         </div>
 
-        <div id="logContainer" class="card p-6 rounded-2xl h-96 overflow-y-auto font-mono text-sm"></div>
+        <!-- Status -->
+        <div class="grid grid-cols-3 gap-4 mb-8">
+            <div class="card p-5 rounded-2xl">
+                <div class="text-slate-400 text-sm">Bot Status</div>
+                <div id="botStatus" class="text-2xl font-bold text-amber-400">STOPPED</div>
+            </div>
+            <div class="card p-5 rounded-2xl">
+                <div class="text-slate-400 text-sm">Active Trades</div>
+                <div id="activeTrades" class="text-2xl font-bold">0 / 3</div>
+            </div>
+            <div class="card p-5 rounded-2xl">
+                <div class="text-slate-400 text-sm">IST Time</div>
+                <div id="liveTime" class="text-xl font-mono"></div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="card p-6 rounded-2xl">
+            <h3 class="font-semibold mb-3">📋 Activity Log</h3>
+            <div id="logContainer" class="log bg-slate-950 p-4 rounded-xl h-96 overflow-y-auto"></div>
+        </div>
     </div>
 
     <script>
+        function updateClock() {
+            document.getElementById('liveTime').textContent = 
+                new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
         async function connectDhan() {
-            const cid = document.getElementById('clientId').value;
-            const tok = document.getElementById('accessToken').value;
-            const res = await fetch('/eqorb/api/connect', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({client_id: cid, access_token: tok})
-            });
-            const data = await res.json();
-            alert(data.message);
-        }
+            const cid = document.getElementById('clientId').value.trim();
+            const tok = document.getElementById('accessToken').value.trim();
 
-        async function startBot() {
-            const res = await fetch('/eqorb/api/start', {method: 'POST'});
-            const data = await res.json();
-            alert(data.message);
-        }
+            if (!cid || !tok) {
+                alert("Please enter both Client ID and Access Token");
+                return;
+            }
 
-        async function emergencyExit() {
-            if (confirm("Close all positions?")) {
-                await fetch('/eqorb/api/emergency_exit', {method: 'POST'});
+            try {
+                const res = await fetch('/eqorb/api/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: cid, access_token: tok })
+                });
+                const data = await res.json();
+                alert(data.message || "Connected successfully");
+            } catch (e) {
+                alert("Connection failed. Check console or token.");
+                console.error(e);
             }
         }
 
-        async function pollLog() {
+        async function startBot() {
+            try {
+                const res = await fetch('/eqorb/api/start', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || "Bot started");
+            } catch (e) {
+                alert("Failed to start bot");
+            }
+        }
+
+        async function emergencyExit() {
+            if (confirm("Close all positions and stop bot?")) {
+                await fetch('/eqorb/api/emergency_exit', { method: 'POST' });
+            }
+        }
+
+        async function pollStatus() {
             try {
                 const res = await fetch('/eqorb/api/status');
                 const data = await res.json();
+                
+                document.getElementById('botStatus').textContent = data.bot_running ? "RUNNING" : "STOPPED";
+                document.getElementById('botStatus').className = data.bot_running 
+                    ? "text-2xl font-bold text-emerald-400" 
+                    : "text-2xl font-bold text-amber-400";
+                
+                document.getElementById('activeTrades').textContent = `${data.active_trades || 0} / 3`;
+
                 const logDiv = document.getElementById('logContainer');
-                logDiv.innerHTML = data.log.map(l => `<div>${l}</div>`).join('');
+                logDiv.innerHTML = data.log ? data.log.map(l => `<div>${l}</div>`).join('') : '';
+                logDiv.scrollTop = logDiv.scrollHeight;
             } catch(e) {}
         }
-        setInterval(pollLog, 3000);
-        pollLog();
+
+        setInterval(pollStatus, 3000);
+        pollStatus();
     </script>
 </body>
 </html>
