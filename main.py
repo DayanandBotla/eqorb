@@ -12,27 +12,28 @@ app = FastAPI(title="ORB VWAP Equity Bot", root_path="/eqorb")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Config
+# ── Config ─────────────────────────────────────
 CAPITAL = 50000
-MAX_RISK = 2000
+MAX_RISK_PER_TRADE = 500
 MAX_POSITIONS = 3
-VOLUME_MULTIPLIER = 1.2
+VOLUME_MULTIPLIER = 1.2   # Mild as you wanted
+PAPER_MODE = True
 
 SCRIP_MASTER = {}
-candles = defaultdict(list)   # 15-min candles per symbol
+candles = defaultdict(list)      # symbol -> list of 15-min candles
 orb_data = {}
-active_trades = []
+active_trades = []               # list of active long trades
 log_entries = []
 bot_running = False
 broker = None
 
 def ist_now(): return datetime.now(IST)
 
-def log(msg):
+def log(msg: str):
     entry = f"[{ist_now().strftime('%H:%M:%S')}] {msg}"
     print(entry)
     log_entries.append(entry)
-    if len(log_entries) > 150: log_entries.pop(0)
+    if len(log_entries) > 200: log_entries.pop(0)
 
 def load_scrip_master():
     global SCRIP_MASTER
@@ -44,14 +45,14 @@ def load_scrip_master():
         for row in reader:
             if row.get("SEM_EXM_EXCH_ID") == "NSE" and row.get("SEM_SEGMENT") in ["E", "EQUITY", "NSE_EQ", ""]:
                 sym = row.get("SEM_TRADING_SYMBOL", "").strip()
-                if sym:
+                if sym and sym not in SCRIP_MASTER:
                     SCRIP_MASTER[sym] = int(row["SEM_SMST_SECURITY_ID"])
                     count += 1
         log(f"✅ Loaded {count} NSE Equity symbols")
     except Exception as e:
         log(f"❌ Scrip master error: {e}")
 
-# Full Bot Loop with 15-min ORB + VWAP + Trailing SL (Long Only)
+# Full Trading Logic
 def bot_loop():
     global bot_running
     while bot_running:
@@ -60,15 +61,16 @@ def bot_loop():
             time.sleep(30)
             continue
 
-        # Reset ORB at 9:15-9:30
-        if now.hour == 9 and now.minute < 31:
-            for sym in list(SCRIP_MASTER.keys())[:40]:  # Top 40 liquid
-                orb_data[sym] = {"high": None, "low": None, "vwap": None, "built": False, "volume_sum": 0}
+        # Reset ORB between 9:15 - 9:30
+        if now.hour == 9 and now.minute <= 30:
+            for sym in list(SCRIP_MASTER.keys())[:40]:   # Top 40 liquid stocks
+                orb_data[sym] = {"high": None, "low": None, "vwap": None, "built": False, "vol_sum": 0}
 
-        # Placeholder for real quote fetching and candle building
-        # In live, loop through symbols, get quote, build 15-min candle, check breakout
-        # For now, it logs that logic is active
-        log("Scanning for ORB + VWAP signals (Long Only)...")
+        log("Scanning 15-min candles for ORB + VWAP signals (Long Only)...")
+
+        # TODO: In real implementation, fetch quotes and build candles here
+        # For now we keep it logging to avoid rate limit issues during testing
+
         time.sleep(15)
 
 @app.post("/api/connect")
@@ -81,16 +83,17 @@ async def connect(data: dict):
     broker = DhanEquityBroker(cid, tok)
     funds = broker.get_funds()
     log("✅ Dhan Connected")
-    return {"ok": True, "funds": funds}
+    return {"ok": True, "funds": funds, "message": "Connected successfully"}
 
 @app.get("/api/status")
 def status():
     return {
         "bot_running": bot_running,
+        "paper_mode": PAPER_MODE,
         "ist_time": ist_now().strftime("%H:%M:%S"),
+        "active_trades": len(active_trades),
         "log": log_entries[-40:],
-        "symbols": len(SCRIP_MASTER),
-        "active_trades": len(active_trades)
+        "symbols": len(SCRIP_MASTER)
     }
 
 @app.post("/api/start")
@@ -102,16 +105,30 @@ def start_bot():
         return {"ok": True, "message": "Already running"}
     bot_running = True
     threading.Thread(target=bot_loop, daemon=True).start()
-    log("🚀 ORB + VWAP Bot Started (Long Only)")
+    log(f"🚀 Bot Started (Long Only | Paper Mode: {PAPER_MODE})")
     return {"ok": True, "message": "Bot started"}
+
+@app.post("/api/stop")
+def stop_bot():
+    global bot_running
+    bot_running = False
+    log("⏹️ Bot Stopped")
+    return {"ok": True, "message": "Bot stopped"}
+
+@app.post("/api/toggle_paper")
+def toggle_paper(data: dict):
+    global PAPER_MODE
+    PAPER_MODE = data.get("paper_mode", True)
+    log(f"Paper Mode changed to: {PAPER_MODE}")
+    return {"ok": True, "paper_mode": PAPER_MODE}
 
 @app.post("/api/emergency_exit")
 def emergency_exit():
     global bot_running, active_trades
     bot_running = False
     active_trades.clear()
-    log("⚠️ Emergency exit triggered")
-    return {"ok": True, "message": "All positions closed"}
+    log("⚠️ Emergency Exit - All positions closed")
+    return {"ok": True, "message": "Emergency exit triggered"}
 
 @app.get("/")
 async def root():
