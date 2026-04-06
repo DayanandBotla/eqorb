@@ -1,7 +1,6 @@
 import time, threading, csv, io, requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from collections import defaultdict
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,13 +13,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # ── Config ─────────────────────────────────────
 CAPITAL = 50000
-MAX_RISK_PER_TRADE = 2000
+MAX_RISK_PER_TRADE = 450          # Safe ~0.9%
 MAX_POSITIONS = 3
 VOLUME_MULTIPLIER = 1.2
 PAPER_MODE = True
 
 SCRIP_MASTER = {}
-active_trades = []
 log_entries = []
 bot_running = False
 broker = None
@@ -50,7 +48,7 @@ def load_scrip_master():
     except Exception as e:
         log(f"❌ Scrip master error: {e}")
 
-# Full Trading Logic - 15-min ORB + VWAP (Long Only)
+# Main Bot Loop
 def bot_loop():
     global bot_running
     while bot_running:
@@ -59,10 +57,9 @@ def bot_loop():
             time.sleep(30)
             continue
 
-        log(f"Scanning for 15-min ORB + VWAP Long signals... (Paper Mode: {PAPER_MODE})")
+        log(f"🔍 Scanning market for ORB + VWAP Long signals... (Paper: {PAPER_MODE})")
 
-        # Real logic placeholder - this is where full ORB, VWAP, breakout, trailing SL will go
-        # For now it runs stably without crashing the service
+        # TODO: Add real 15-min candle building, ORB, VWAP, breakout detection, trailing SL here
 
         time.sleep(15)
 
@@ -117,11 +114,10 @@ def toggle_paper(data: dict):
 
 @app.post("/api/emergency_exit")
 def emergency_exit():
-    global bot_running, active_trades
+    global bot_running
     bot_running = False
-    active_trades.clear()
     log("⚠️ Emergency Exit triggered")
-    return {"ok": True, "message": "All positions closed"}
+    return {"ok": True, "message": "Emergency exit triggered"}
 
 @app.get("/")
 async def root():
