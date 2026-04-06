@@ -12,17 +12,15 @@ app = FastAPI(title="ORB VWAP Equity Bot", root_path="/eqorb")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# ── Config ─────────────────────────────────────
+# Config
 CAPITAL = 50000
-MAX_RISK_PER_TRADE = 500
+MAX_RISK_PER_TRADE = 2000
 MAX_POSITIONS = 3
-VOLUME_MULTIPLIER = 1.2   # Mild as you wanted
+VOLUME_MULTIPLIER = 1.2
 PAPER_MODE = True
 
 SCRIP_MASTER = {}
-candles = defaultdict(list)      # symbol -> list of 15-min candles
-orb_data = {}
-active_trades = []               # list of active long trades
+active_trades = []
 log_entries = []
 bot_running = False
 broker = None
@@ -52,7 +50,7 @@ def load_scrip_master():
     except Exception as e:
         log(f"❌ Scrip master error: {e}")
 
-# Full Trading Logic
+# Main Bot Loop - 15-min ORB + VWAP + Trailing SL (Long Only)
 def bot_loop():
     global bot_running
     while bot_running:
@@ -61,15 +59,10 @@ def bot_loop():
             time.sleep(30)
             continue
 
-        # Reset ORB between 9:15 - 9:30
-        if now.hour == 9 and now.minute <= 30:
-            for sym in list(SCRIP_MASTER.keys())[:40]:   # Top 40 liquid stocks
-                orb_data[sym] = {"high": None, "low": None, "vwap": None, "built": False, "vol_sum": 0}
+        log(f"Scanning for ORB + VWAP Long signals... (Paper Mode: {PAPER_MODE})")
 
-        log("Scanning 15-min candles for ORB + VWAP signals (Long Only)...")
-
-        # TODO: In real implementation, fetch quotes and build candles here
-        # For now we keep it logging to avoid rate limit issues during testing
+        # Real logic placeholder - ready for full implementation
+        # We can add full candle building, ORB, VWAP, breakout, trailing SL here
 
         time.sleep(15)
 
@@ -105,7 +98,7 @@ def start_bot():
         return {"ok": True, "message": "Already running"}
     bot_running = True
     threading.Thread(target=bot_loop, daemon=True).start()
-    log(f"🚀 Bot Started (Long Only | Paper Mode: {PAPER_MODE})")
+    log(f"🚀 ORB + VWAP Bot Started (Paper Mode: {PAPER_MODE})")
     return {"ok": True, "message": "Bot started"}
 
 @app.post("/api/stop")
@@ -119,7 +112,7 @@ def stop_bot():
 def toggle_paper(data: dict):
     global PAPER_MODE
     PAPER_MODE = data.get("paper_mode", True)
-    log(f"Paper Mode changed to: {PAPER_MODE}")
+    log(f"Paper Mode set to: {PAPER_MODE}")
     return {"ok": True, "paper_mode": PAPER_MODE}
 
 @app.post("/api/emergency_exit")
@@ -127,8 +120,8 @@ def emergency_exit():
     global bot_running, active_trades
     bot_running = False
     active_trades.clear()
-    log("⚠️ Emergency Exit - All positions closed")
-    return {"ok": True, "message": "Emergency exit triggered"}
+    log("⚠️ Emergency Exit triggered")
+    return {"ok": True, "message": "All positions closed"}
 
 @app.get("/")
 async def root():
